@@ -32,8 +32,7 @@ uint32_t inline GetSize(uint32_t value){
 }
 
 uint32_t inline SizeToIdx(uint32_t volSize){
-    int i = 31;
-    for(i = 31; i > 4; i--){
+    for(int i = 31; i > 4; i--){
         if(volSize & 0x80000000)
             return i;
         volSize = volSize << 1;
