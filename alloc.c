@@ -78,13 +78,13 @@ void push(void* ptr){
     }
     
     char* now = tmp->next;
-    while(now != NULL){
-        tmp = (link_node*) now;
-        if(nodeSize < GetSize(tmp->header))
-            break;
-        before = now;
-        now = tmp->next;
-    }
+    // while(now != NULL){
+    //     tmp = (link_node*) now;
+    //     if(nodeSize < GetSize(tmp->header))
+    //         break;
+    //     before = now;
+    //     now = tmp->next;
+    // }
 
     if(now == NULL)
         memcpy(before + 4, &ptr, 8);
@@ -161,8 +161,8 @@ char* FindFreeBlock(uint32_t size){
         while(now != NULL){
             link_node* tmp = (link_node*) now;
             if(GetSize(tmp->header) >= size){
-                    pop(now);
-                    return ReduceNode(now, size);
+                pop(now);
+                return ReduceNode(now, size);
             }
             now = tmp->next;
         }
@@ -187,9 +187,10 @@ void* GetMemory(uint32_t volSize){
 }
 
 uint32_t CalcAlignSize(uint32_t size){
-    uint32_t quotient = size >> 3;
-    uint32_t residue = size % 8;
-    return (quotient + (residue ? 1 : 0)) * 8;
+    if(size & 7){
+        return (size + 8) & 0xFFFFFFF8;
+    }
+    return size;
 }
 
 void* myalloc(size_t size){
