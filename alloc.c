@@ -4,7 +4,6 @@
 
 extern void debug(const char *fmt, ...);
 extern void *sbrk(intptr_t increment);
-uint32_t SizeToIdx(uint32_t volSize);
 uint32_t  PtrToIdx(void* ptr);
 void* Coalesce(void* ptr);
 char* ReduceNode(char* ptr, uint32_t size);
@@ -21,7 +20,6 @@ void* heap_begin = NULL;
 void* heap_end = NULL;
 
 int initialization = 1;
-unsigned int max_size;
 link_node freeList[32];
 
 uint32_t inline IsAlloc(uint32_t value){
@@ -30,15 +28,6 @@ uint32_t inline IsAlloc(uint32_t value){
 
 uint32_t inline GetSize(uint32_t value){
     return value & ~1;
-}
-
-uint32_t inline SizeToIdx(uint32_t volSize){
-    for(int i = 31; i > 4; i--){
-        if(volSize & 0x80000000)
-            return i;
-        volSize = volSize << 1;
-    }
-    return 0;
 }
 
 uint32_t inline PtrToIdx(void* ptr){
@@ -115,7 +104,7 @@ void* Coalesce(void* ptr){
     //ptr 앞의 노드가 free 상태라면
     if(heap_begin != front){
         memcpy(&tmp, front-4, 4);
-        if(tmp && !IsAlloc(tmp)){
+        if(!IsAlloc(tmp)){
             front -= tmp;
             node_size += tmp;
             pop(front);
@@ -125,8 +114,8 @@ void* Coalesce(void* ptr){
     //ptr 뒤의 노드가 free 상태라면
     char* end = front + node_size;
     if(end != heap_end){
-        memcpy(&tmp, end, 4);  //Error
-        if(tmp && !IsAlloc(tmp)){
+        memcpy(&tmp, end, 4);
+        if(!IsAlloc(tmp)){
             pop(end);
             end += tmp;
             node_size += tmp;
@@ -162,8 +151,6 @@ char* ReduceNode(char* ptr, uint32_t size){
 
 char* FindFreeBlock(uint32_t size){ 
     char* now = NULL;
-    link_node* tmp = NULL;
-
     //리스트 순회 후 메모리 할당
     
     uint32_t idx = PtrToIdx(&size);
@@ -172,7 +159,7 @@ char* FindFreeBlock(uint32_t size){
         if(now == NULL)
             continue;
         while(now != NULL){
-            tmp = (link_node*) now;
+            link_node* tmp = (link_node*) now;
             if(GetSize(tmp->header) >= size){
                     pop(now);
                     return ReduceNode(now, size);
