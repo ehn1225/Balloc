@@ -5,6 +5,7 @@
 extern void debug(const char *fmt, ...);
 extern void *sbrk(intptr_t increment);
 uint32_t SizeToIdx(uint32_t volSize);
+uint32_t  PtrToIdx(void* ptr);
 void* Coalesce(void* ptr);
 char* ReduceNode(char* ptr, uint32_t size);
 void *myrealloc(void *ptr, size_t size);
@@ -40,11 +41,24 @@ uint32_t inline SizeToIdx(uint32_t volSize){
     return 0;
 }
 
+uint32_t inline PtrToIdx(void* ptr){
+    for(int i = 3; i >= 0 ; i--){
+        char c = *((char*)ptr + i);
+        if(c != 0){
+            for(int j = 7; j >= 0; j--){
+                if(c & 0x80){
+                    return j + (i*8);
+                }
+                c = c << 1;
+            }
+        }
+    }
+
+}
+
 void pop(void* ptr){
     //ptr을 가진 노드를 free list에서 제거
-    link_node* node = (link_node*) ptr;
-    uint32_t nodeSize = GetSize(node->header);
-    uint32_t idx = SizeToIdx(nodeSize);
+    uint32_t idx = PtrToIdx(ptr);
 
     char* before = &freeList[idx];
     link_node* tmp = (link_node*) before;
@@ -64,7 +78,7 @@ void pop(void* ptr){
 void push(void* ptr){
     link_node* node = (link_node*) ptr;
     uint32_t nodeSize = GetSize(node->header);
-    uint32_t idx = SizeToIdx(nodeSize);
+    uint32_t idx = PtrToIdx(ptr);
     memset(ptr + 4, 0, 8);
     char* before = &freeList[idx];
     link_node* tmp = (link_node*) before;
@@ -151,7 +165,8 @@ char* FindFreeBlock(uint32_t size){
     link_node* tmp = NULL;
 
     //리스트 순회 후 메모리 할당
-    uint32_t idx = SizeToIdx(size);
+    
+    uint32_t idx = PtrToIdx(&size);
     for(idx; idx < 32; idx++){
         now = freeList[idx].next;
         if(now == NULL)
@@ -175,7 +190,6 @@ void* GetMemory(uint32_t volSize){
 
     if(resultPtr == NULL){
         resultPtr = sbrk(volSize);
-        max_size += volSize;
         heap_end = sbrk(0);
         uint32_t header = volSize | 1;
         memcpy(resultPtr, &header, 4);
@@ -186,7 +200,7 @@ void* GetMemory(uint32_t volSize){
 }
 
 uint32_t CalcAlignSize(uint32_t size){
-    uint32_t quotient = size / 8;
+    uint32_t quotient = size >> 3;
     uint32_t residue = size % 8;
     return (quotient + (residue ? 1 : 0)) * 8;
 }
