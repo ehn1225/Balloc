@@ -65,33 +65,17 @@ void pop(void* ptr){
 
 
 void push(void* ptr){
-    link_node* node = (link_node*) ptr;
-    uint32_t nodeSize = GetSize(node->header);
     uint32_t idx = PtrToIdx(ptr);
     memset(ptr + 4, 0, 8);
     char* before = &freeList[idx];
-    link_node* tmp = (link_node*) before;
 
     if(freeList[idx].next == NULL){
         freeList[idx].next = ptr;
         return;
     }
     
-    char* now = tmp->next;
-    // while(now != NULL){
-    //     tmp = (link_node*) now;
-    //     if(nodeSize < GetSize(tmp->header))
-    //         break;
-    //     before = now;
-    //     now = tmp->next;
-    // }
-
-    if(now == NULL)
-        memcpy(before + 4, &ptr, 8);
-    else{
-        memcpy(ptr + 4, &now, 8);
-        memcpy(before + 4, &ptr, 8);
-    }
+    memcpy(ptr + 4, &freeList[idx].next, 8);
+    memcpy(before + 4, &ptr, 8);
 }
 
 void* Coalesce(void* ptr){
