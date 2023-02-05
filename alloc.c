@@ -37,12 +37,12 @@ uint32_t inline PtrToIdx(void* ptr){
             }
         }
     }
-    printf("nope\n");
 }
 
-void pop(void* ptr){
+void pop(void* ptr, uint32_t idx){
     //ptr을 가진 노드를 free list에서 제거
-    uint32_t idx = PtrToIdx(ptr);
+    if(idx == 0)
+        idx = PtrToIdx(ptr);
     char* now = freeList[idx].next;
     char* before = &freeList[idx];
     link_node* tmp;
@@ -85,7 +85,7 @@ void* Coalesce(void* ptr){
         if(!IsAlloc(tmp)){
             front -= tmp;
             node_size += tmp;
-            pop(front);
+            pop(front, 0);
         }
     }
 
@@ -94,7 +94,7 @@ void* Coalesce(void* ptr){
     if(end != heap_end){
         tmp = *(uint32_t*)end;
         if(!IsAlloc(tmp)){
-            pop(end);
+            pop(end, 0);
             end += tmp;
             node_size += tmp;
         }
@@ -118,7 +118,6 @@ char* ReduceNode(char* ptr, uint32_t size){
         memcpy(newPtr + subsize - 4, &subsize, 4);
         push(newPtr);
     }
-
     uint32_t header = newSize | 1;
     memcpy(ptr, &header, 4);
     memcpy(ptr + newSize - 4, &header, 4);
@@ -136,7 +135,7 @@ char* FindFreeBlock(uint32_t size){
         while(now != NULL){
             tmp = (link_node*) now;
             if(GetSize(tmp->header) >= size){
-                pop(now);
+                pop(now, idx);
                 return ReduceNode(now, size);
             }
             now = tmp->next;
@@ -212,8 +211,9 @@ void myfree(void *ptr){
     //NULL ptr을 free할 경우
     if(ptr == NULL){
         return;
-    } 
-    push(Coalesce(ptr-4));
+    }
+    
+    push(Coalesce(ptr-4));    
 }
 
 // char* nextNode = (char*)ptr + nodeSize - 4;
