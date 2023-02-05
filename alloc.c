@@ -130,7 +130,7 @@ char* FindFreeBlock(uint32_t size){
     uint32_t idx = PtrToIdx(&size);
     char* now;
     link_node* tmp = NULL;
-    for(; idx < 32; idx++){
+    for(; idx < 25; idx++){
         now = freeList[idx].next;
         while(now != NULL){
             tmp = (link_node*) now;
@@ -167,7 +167,7 @@ uint32_t CalcAlignSize(uint32_t size){
 
 void* myalloc(size_t size){
     if(initialization){
-        for(int i = 31; i >= 0; i--){
+        for(int i = 25; i >= 0; i--){
             //freeList[i].header = 0;
             freeList[i].next = NULL;
         }
@@ -228,3 +228,4 @@ void myfree(void *ptr){
 //         return ptr;
 //     }
 // }
+//push함수 없애는 것은 의미 없었음.
