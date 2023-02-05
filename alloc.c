@@ -3,13 +3,13 @@
 #include <string.h>
 #define IsAlloc(value) ((value) & (1))
 #define GetSize(value) ((value) & (~1))
+#define CalcAlignSize(value) ((value & 7) ? ((size + 16) & ~7) : size + 8)
 
 extern void debug(const char *fmt, ...);
 extern void *sbrk(intptr_t increment);
 uint32_t  PtrToIdx(void* ptr);
 void* Coalesce(void* ptr);
 char* ReduceNode(char* ptr, uint32_t size);
-char* FindFreeBlock(uint32_t size);
 void *myrealloc(void *ptr, size_t size);
 void myfree(void *ptr);
 
@@ -21,8 +21,7 @@ typedef struct {
 void* heap_begin = NULL;
 void* heap_end = NULL;
 
-int initialization = 1;
-link_node freeList[32];
+link_node freeList[24] = {0, };
 
 uint32_t inline PtrToIdx(void* ptr){
     //주요 최적화 포인트
@@ -125,57 +124,41 @@ char* ReduceNode(char* ptr, uint32_t size){
     return ptr;
 }
 
-char* FindFreeBlock(uint32_t size){ 
-    //리스트 순회 후 메모리 할당
-    uint32_t idx = PtrToIdx(&size);
-    char* now;
+void* GetMemory(uint32_t volSize){
+    char* resultPtr = NULL;
+    uint32_t idx = PtrToIdx(&volSize);
     link_node* tmp = NULL;
-    for(; idx < 25; idx++){
-        now = freeList[idx].next;
-        while(now != NULL){
-            tmp = (link_node*) now;
-            if(GetSize(tmp->header) >= size){
-                pop(now, idx);
-                return ReduceNode(now, size);
+    for(; idx < 24; idx++){
+        resultPtr = freeList[idx].next;
+        while(resultPtr != NULL){
+            tmp = (link_node*) resultPtr;
+            if(GetSize(tmp->header) >= volSize){
+                pop(resultPtr, idx);
+                resultPtr = ReduceNode(resultPtr, volSize);
+                idx = 64;
+                break;
             }
-            now = tmp->next;
+            resultPtr = tmp->next;
         }
     }
-    return NULL;
-}
 
-void* GetMemory(uint32_t volSize){
-    char* resultPtr = FindFreeBlock(volSize);
     if(!resultPtr){
+        if(heap_begin == NULL){
+            heap_begin = sbrk(0);
+            heap_end = heap_begin;
+        }
         resultPtr = sbrk(volSize);
-        heap_end = sbrk(0);
-        uint32_t header = volSize | 1;
-        memcpy(resultPtr, &header, 4);
-        memcpy(heap_end - 4, &header, 4);
+        heap_end += volSize;
+        volSize++;
+        memcpy(resultPtr, &volSize, 4);
+        memcpy(heap_end - 4, &volSize, 4);
         return resultPtr + 4;
     }
+
     return resultPtr + 4;
-
-}
-
-uint32_t CalcAlignSize(uint32_t size){
-    if(size & 7){
-        return (size + 16) & 0xFFFFFFF8;
-    }
-    return size + 8;
 }
 
 void* myalloc(size_t size){
-    if(initialization){
-        for(int i = 25; i >= 0; i--){
-            //freeList[i].header = 0;
-            freeList[i].next = NULL;
-        }
-        heap_begin = sbrk(0);
-        heap_end = heap_begin;
-        initialization = 0;
-    }
-
     uint32_t volume_size = CalcAlignSize(size);
     return GetMemory(volume_size);
 }
@@ -183,13 +166,13 @@ void* myalloc(size_t size){
 void *myrealloc(void *ptr, size_t size){
     //ptr이 NULL이면 할당을 해주세요
     //size = 0이면 free 해주세요
+    if(!ptr){
+        return myalloc(size);
+    }
+
     if(size == 0){
         myfree(ptr);
         return NULL;
-    }
-
-    if(!ptr){
-        return myalloc(size);
     }
 
     uint32_t nodeSize = GetSize(*(int*)(ptr - 4));
@@ -198,12 +181,12 @@ void *myrealloc(void *ptr, size_t size){
         return ptr;
     }
 
-    if(nodeSize > newSize){
-        return ReduceNode(ptr-4, newSize) + 4;
-    }
-    else{
+    if(nodeSize < newSize){
         myfree(ptr);
         return GetMemory(newSize);
+    }
+    else{
+        return ReduceNode(ptr-4, newSize) + 4;
     }
 }
 
@@ -215,17 +198,3 @@ void myfree(void *ptr){
     
     push(Coalesce(ptr-4));    
 }
-
-// char* nextNode = (char*)ptr + nodeSize - 4;
-// if(nextNode != heap_end){
-//     link_node* next = (link_node*) nextNode;
-//     uint32_t nextSize = GetSize(next->header);
-//     if(nodeSize + nextSize == newSize){
-//         nodeSize = newSize | 1;
-//         pop(nextNode);
-//         memcpy(ptr-4, &nodeSize, 4);
-//         memcpy(ptr + newSize - 8, &nodeSize, 4);
-//         return ptr;
-//     }
-// }
-//push함수 없애는 것은 의미 없었음.
