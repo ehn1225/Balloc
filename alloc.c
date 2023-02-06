@@ -24,8 +24,6 @@ void* heap_end = NULL;
 link_node freeList[32] = {0, };
 
 uint32_t inline PtrToIdx(void* ptr){
-    //주요 최적화 포인트
-    //이진조건
     int value = *(int*)ptr;
     if(value & 0xFFFF0000){
         //상위 2바이트에 값이 있을 경우
@@ -66,7 +64,6 @@ uint32_t inline PtrToIdx(void* ptr){
                     return 21;
                 if(value & 0x00100000)
                     return 20;
-
             }
             else{
                 //하위 4비트에 값이 있다면 (0x000F0000)
@@ -132,24 +129,8 @@ uint32_t inline PtrToIdx(void* ptr){
                 if(value & 0x00000001)
                     return 0;
             }
-
         }
-
     }
-
-
-
-    // for(int i = 2; i >= 0 ; i--){
-    //     char c = *((char*)ptr + i);
-    //     if(c != 0){
-    //         for(int j = 7; j >= 0; j--){
-    //             if(c & 0x80){
-    //                 return j + (i*8);
-    //             }
-    //             c = c << 1;
-    //         }
-    //     }
-    // }
 }
 
 void pop(void* ptr, uint32_t idx){
@@ -241,21 +222,21 @@ char* ReduceNode(char* ptr, uint32_t size){
 void* GetMemory(uint32_t volSize){
     char* resultPtr = NULL;
     uint32_t idx = PtrToIdx(&volSize);
-    link_node* tmp = NULL;
+    //link_node* tmp = NULL;
     for(; idx < 32; idx++){
         resultPtr = freeList[idx].next;
         while(resultPtr != NULL){
-            tmp = (link_node*) resultPtr;
+            link_node* tmp = (link_node*) resultPtr;
             if(GetSize(tmp->header) >= volSize){
                 pop(resultPtr, idx);
                 resultPtr = ReduceNode(resultPtr, volSize);
-                idx = 64;
-                break;
+                goto next;
             }
             resultPtr = tmp->next;
         }
     }
 
+next:
     if(!resultPtr){
         if(heap_begin == NULL){
             heap_begin = sbrk(0);
