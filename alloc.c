@@ -3,13 +3,12 @@
 #include <string.h>
 #define IsAlloc(value) ((value) & (1))
 #define GetSize(value) ((value) & (~1))
-#define CalcAlignSize(value) ((value & 7) ? ((size + 16) & ~7) : size + 8)
+#define CalcAlignSize(value) ((value & 7) ? ((value + 16) & ~7) : value + 8)
 
 extern void debug(const char *fmt, ...);
 extern void *sbrk(intptr_t increment);
-uint32_t  PtrToIdx(void* ptr);
 void* Coalesce(void* ptr);
-char* ReduceNode(char* ptr, uint32_t size);
+void ReduceNode(char* ptr, uint32_t size);
 void *myrealloc(void *ptr, size_t size);
 void myfree(void *ptr);
 
@@ -23,7 +22,7 @@ void* heap_end = NULL;
 
 link_node freeList[32] = {0, };
 
-uint32_t inline PtrToIdx(void* ptr){
+uint8_t PtrToIdx(void* ptr){
     int value = *(int*)ptr;
     if(value & 0xFFFF0000){
         //상위 2바이트에 값이 있을 경우
@@ -135,36 +134,24 @@ uint32_t inline PtrToIdx(void* ptr){
 
 void pop(void* ptr, uint32_t idx){
     //ptr을 가진 노드를 free list에서 제거
-    if(idx == 0)
-        idx = PtrToIdx(ptr);
     char* now = freeList[idx].next;
     char* before = &freeList[idx];
-    link_node* tmp;
     while(now != NULL){
-        tmp = (link_node*) now;
         if(now == ptr)
             break;
+        link_node* tmp = (link_node*) now;
         before = now;
         now = tmp->next;
     }
-    memcpy(before + 4, &tmp->next, 8);
+
+    memcpy(before + 4, now + 4, 8);
 }
 
-
 void push(void* ptr){
-    uint32_t idx = PtrToIdx(ptr);
-
-    if(freeList[idx].next){
-        char* before = &freeList[idx];
-        memcpy(ptr + 4, (before+4), 8);
-        memcpy(before + 4, &ptr, 8);
-        return;
-    }
-    else{
-        memset(ptr + 4, 0, 8);
-        freeList[idx].next = ptr;
-        return;
-    }
+    uint8_t idx = PtrToIdx(ptr);
+    char* before = &freeList[idx];
+    memcpy(ptr + 4, before+4, 8);
+    memcpy(before + 4, &ptr, 8);
 }
 
 void* Coalesce(void* ptr){
@@ -179,7 +166,7 @@ void* Coalesce(void* ptr){
         if(!IsAlloc(tmp)){
             front -= tmp;
             node_size += tmp;
-            pop(front, 0);
+            pop(front, PtrToIdx(front));
         }
     }
 
@@ -188,19 +175,19 @@ void* Coalesce(void* ptr){
     if(end != heap_end){
         tmp = *(uint32_t*)end;
         if(!IsAlloc(tmp)){
-            pop(end, 0);
+            pop(end, PtrToIdx(end));
             end += tmp;
             node_size += tmp;
         }
     }
 
     //새로운 크기 저장
-    memcpy(front, &node_size, 4);
-    memcpy(end - 4, &node_size, 4);
+    *(uint32_t*)front = node_size;
+    *(uint32_t*)(end - 4) = node_size;
 
     return front;
 }
-char* ReduceNode(char* ptr, uint32_t size){
+void ReduceNode(char* ptr, uint32_t size){
     uint32_t newSize = GetSize(*(int*)ptr);
     uint32_t subsize = newSize - size;
 
@@ -208,20 +195,18 @@ char* ReduceNode(char* ptr, uint32_t size){
     if(subsize > 16){
         char* newPtr = ptr + size;
         newSize -= subsize;
-        memcpy(newPtr, &subsize, 4);
-        memcpy(newPtr + subsize - 4, &subsize, 4);
+        *(uint32_t*)newPtr = subsize;
+        *(uint32_t*)(newPtr + subsize - 4) = subsize;
         push(newPtr);
     }
     uint32_t header = newSize | 1;
-    memcpy(ptr, &header, 4);
-    memcpy(ptr + newSize - 4, &header, 4);
-
-    return ptr;
+    *(uint32_t*)ptr = header;
+    *(uint32_t*)(ptr + newSize - 4) = header;
 }
 
 void* GetMemory(uint32_t volSize){
     char* resultPtr = NULL;
-    uint32_t idx = PtrToIdx(&volSize);
+    uint8_t idx = PtrToIdx(&volSize);
     //link_node* tmp = NULL;
     for(; idx < 32; idx++){
         resultPtr = freeList[idx].next;
@@ -229,7 +214,7 @@ void* GetMemory(uint32_t volSize){
             link_node* tmp = (link_node*) resultPtr;
             if(GetSize(tmp->header) >= volSize){
                 pop(resultPtr, idx);
-                resultPtr = ReduceNode(resultPtr, volSize);
+                ReduceNode(resultPtr, volSize);
                 goto next;
             }
             resultPtr = tmp->next;
@@ -245,8 +230,8 @@ next:
         resultPtr = sbrk(volSize);
         heap_end += volSize;
         volSize++;      //VolSize = Volsize | 1
-        memcpy(resultPtr, &volSize, 4);
-        memcpy(heap_end - 4, &volSize, 4);
+        *(uint32_t*)resultPtr = volSize;
+        *(uint32_t*)(heap_end - 4) = volSize;
         return resultPtr + 4;
     }
 
@@ -281,7 +266,8 @@ void *myrealloc(void *ptr, size_t size){
         return GetMemory(newSize);
     }
     else{
-        return ReduceNode(ptr-4, newSize) + 4;
+        ReduceNode(ptr-4, newSize);
+        return ptr;
     }
 }
 
